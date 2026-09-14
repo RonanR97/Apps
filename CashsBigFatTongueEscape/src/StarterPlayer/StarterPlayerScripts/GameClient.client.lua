@@ -2,6 +2,8 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local MarketplaceService = game:GetService("MarketplaceService")
+local Monetization = require(ReplicatedStorage:WaitForChild("MonetizationConfig"))
 
 local player = Players.LocalPlayer
 local remotes = ReplicatedStorage:WaitForChild("TongueRemotes")
@@ -133,6 +135,97 @@ local function showMessage(text)
 	end)
 end
 feedbackEvent.OnClientEvent:Connect(showMessage)
+
+local shopButton = Instance.new("TextButton")
+shopButton.Name = "ShopButton"
+shopButton.Size = UDim2.fromOffset(145, 52)
+shopButton.Position = UDim2.new(1, -165, 0, 18)
+shopButton.BackgroundColor3 = Color3.fromRGB(255, 190, 35)
+shopButton.Text = "🛒 SHOP"
+shopButton.TextColor3 = Color3.fromRGB(45, 25, 60)
+shopButton.Font = Enum.Font.GothamBlack
+shopButton.TextScaled = true
+shopButton.Parent = gui
+round(shopButton, 16)
+stroke(shopButton, Color3.new(1, 1, 1), 2)
+
+local shop = Instance.new("Frame")
+shop.Name = "PremiumShop"
+shop.Size = UDim2.fromOffset(430, 490)
+shop.Position = UDim2.new(0.5, -215, 0.5, -245)
+shop.BackgroundColor3 = Color3.fromRGB(31, 22, 48)
+shop.Visible = false
+shop.Parent = gui
+round(shop, 22)
+stroke(shop, Color3.fromRGB(255, 193, 50), 3)
+
+local shopTitle = Instance.new("TextLabel")
+shopTitle.Size = UDim2.new(1, -70, 0, 55)
+shopTitle.Position = UDim2.fromOffset(18, 8)
+shopTitle.BackgroundTransparency = 1
+shopTitle.Text = "BIG FAT TONGUE SHOP"
+shopTitle.TextColor3 = Color3.fromRGB(255, 212, 62)
+shopTitle.Font = Enum.Font.GothamBlack
+shopTitle.TextScaled = true
+shopTitle.Parent = shop
+
+local close = Instance.new("TextButton")
+close.Size = UDim2.fromOffset(46, 46)
+close.Position = UDim2.new(1, -55, 0, 9)
+close.BackgroundColor3 = Color3.fromRGB(235, 70, 100)
+close.Text = "X"
+close.TextColor3 = Color3.new(1, 1, 1)
+close.Font = Enum.Font.GothamBlack
+close.TextScaled = true
+close.Parent = shop
+round(close, 14)
+
+local list = Instance.new("ScrollingFrame")
+list.Size = UDim2.new(1, -28, 1, -78)
+list.Position = UDim2.fromOffset(14, 66)
+list.BackgroundTransparency = 1
+list.BorderSizePixel = 0
+list.ScrollBarThickness = 6
+list.CanvasSize = UDim2.fromOffset(0, 540)
+list.Parent = shop
+local layout = Instance.new("UIListLayout")
+layout.Padding = UDim.new(0, 10)
+layout.Parent = list
+
+local function addShopItem(item, itemType, accent)
+	local card = Instance.new("TextButton")
+	card.Size = UDim2.new(1, -10, 0, 80)
+	card.BackgroundColor3 = accent
+	card.Text = item.Label .. "\n" .. item.Description
+	card.TextColor3 = Color3.new(1, 1, 1)
+	card.TextWrapped = true
+	card.Font = Enum.Font.GothamBold
+	card.TextSize = 15
+	card.Parent = list
+	round(card, 15)
+	stroke(card, Color3.new(1, 1, 1), 1.5)
+	card.Activated:Connect(function()
+		if item.Id <= 0 then
+			showMessage("Publish first, then add this item ID")
+			return
+		end
+		if itemType == "Pass" then
+			MarketplaceService:PromptGamePassPurchase(player, item.Id)
+		else
+			MarketplaceService:PromptProductPurchase(player, item.Id)
+		end
+	end)
+end
+
+addShopItem(Monetization.GamePasses.VIP, "Pass", Color3.fromRGB(210, 148, 25))
+addShopItem(Monetization.GamePasses.DoubleGrowth, "Pass", Color3.fromRGB(230, 70, 145))
+addShopItem(Monetization.GamePasses.SuperTongue, "Pass", Color3.fromRGB(130, 70, 225))
+addShopItem(Monetization.Products.Clicks500, "Product", Color3.fromRGB(55, 155, 235))
+addShopItem(Monetization.Products.Clicks5000, "Product", Color3.fromRGB(35, 185, 135))
+addShopItem(Monetization.Products.SkipCheckpoint, "Product", Color3.fromRGB(235, 100, 55))
+
+shopButton.Activated:Connect(function() shop.Visible = not shop.Visible end)
+close.Activated:Connect(function() shop.Visible = false end)
 
 local function updateStats()
 	local stats = player:FindFirstChild("leaderstats")
