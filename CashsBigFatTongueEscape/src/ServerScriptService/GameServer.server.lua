@@ -29,7 +29,10 @@ local feedbackEvent = remotes:FindFirstChild("Feedback") or Instance.new("Remote
 feedbackEvent.Name = "Feedback"
 feedbackEvent.Parent = remotes
 
-local store = DataStoreService:GetDataStore("CashsBigFatTongueEscapeV1")
+local store
+pcall(function()
+	store = DataStoreService:GetDataStore("CashsBigFatTongueEscapeV1")
+end)
 local sessions = {}
 
 local function makeValue(className, name, value, parent)
@@ -107,9 +110,12 @@ end
 
 local function loadPlayer(player)
 	local data = defaultData()
-	local ok, result = pcall(function()
-		return store:GetAsync("p_" .. player.UserId)
-	end)
+	local ok, result = false, nil
+	if store then
+		ok, result = pcall(function()
+			return store:GetAsync("p_" .. player.UserId)
+		end)
+	end
 	if ok then
 		data = sanitize(result)
 	end
@@ -160,6 +166,7 @@ local function snapshot(player)
 end
 
 local function savePlayer(player)
+	if not store then return end
 	local data = snapshot(player)
 	if not data then return end
 	pcall(function()
