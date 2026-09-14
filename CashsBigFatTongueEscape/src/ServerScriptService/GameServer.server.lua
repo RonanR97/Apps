@@ -2,6 +2,8 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local DataStoreService = game:GetService("DataStoreService")
 local Debris = game:GetService("Debris")
+local MarketplaceService = game:GetService("MarketplaceService")
+local Monetization = require(ReplicatedStorage:WaitForChild("MonetizationConfig"))
 
 local CONFIG = {
 	StartingTongue = 12,
@@ -66,6 +68,43 @@ local function sanitize(raw)
 	return data
 end
 
+local function ownsPass(player, pass)
+	if not pass or pass.Id <= 0 then return false end
+	local ok, owned = pcall(function()
+		return MarketplaceService:UserOwnsGamePassAsync(player.UserId, pass.Id)
+	end)
+	return ok and owned
+end
+
+local function refreshBenefits(player)
+	player:SetAttribute("HasVIP", ownsPass(player, Monetization.GamePasses.VIP))
+	player:SetAttribute("HasDoubleGrowth", ownsPass(player, Monetization.GamePasses.DoubleGrowth))
+	player:SetAttribute("HasSuperTongue", ownsPass(player, Monetization.GamePasses.SuperTongue))
+end
+
+local function applyCharacterBenefits(player, character)
+	local humanoid = character:WaitForChild("Humanoid", 5)
+	local head = character:WaitForChild("Head", 5)
+	if player:GetAttribute("HasVIP") and humanoid then humanoid.WalkSpeed = 20 end
+	if player:GetAttribute("HasVIP") and head and not head:FindFirstChild("VIPTag") then
+		local tag = Instance.new("BillboardGui")
+		tag.Name = "VIPTag"
+		tag.Size = UDim2.fromOffset(120, 30)
+		tag.StudsOffset = Vector3.new(0, 2.8, 0)
+		tag.AlwaysOnTop = true
+		tag.Parent = head
+		local label = Instance.new("TextLabel")
+		label.Size = UDim2.fromScale(1, 1)
+		label.BackgroundTransparency = 1
+		label.Text = "👑 VIP"
+		label.TextColor3 = Color3.fromRGB(255, 220, 55)
+		label.TextStrokeTransparency = 0
+		label.Font = Enum.Font.GothamBlack
+		label.TextScaled = true
+		label.Parent = tag
+	end
+end
+
 local function loadPlayer(player)
 	local data = defaultData()
 	local ok, result = pcall(function()
@@ -90,8 +129,10 @@ local function loadPlayer(player)
 	makeValue("IntValue", "ClickLevel", data.ClickLevel, progress)
 
 	sessions[player] = {lastClick = 0, lastGrapple = 0, dirty = false}
+	refreshBenefits(player)
 
 	player.CharacterAdded:Connect(function(character)
+		applyCharacterBenefits(player, character)
 		task.wait(0.25)
 		local checkpoint = progress.Checkpoint.Value
 		local world = workspace:FindFirstChild("TongueEscapeWorld")
@@ -137,6 +178,8 @@ local function click(player)
 	if now - session.lastClick < CONFIG.ClickCooldown then return end
 	session.lastClick = now
 	local gain = progress.ClickLevel.Value * math.max(1, stats.Rebirths.Value + 1)
+	if player:GetAttribute("HasDoubleGrowth") then gain *= 2 end
+	if player:GetAttribute("HasVIP") then gain = math.max(1, math.floor(gain * 1.5)) end
 	stats.Clicks.Value += gain
 	stats.TongueLength.Value = math.min(CONFIG.MaxTongue, stats.TongueLength.Value + gain)
 	session.dirty = true
@@ -156,7 +199,8 @@ local function grapple(player, target)
 	if now - session.lastGrapple < CONFIG.GrappleCooldown then return end
 	local offset = target - head.Position
 	local distance = offset.Magnitude
-	if distance < 3 or distance > stats.TongueLength.Value + 2 then
+	local premiumRange = player:GetAttribute("HasSuperTongue") and 30 or 0
+	if distance < 3 or distance > stats.TongueLength.Value + premiumRange + 2 then
 		feedbackEvent:FireClient(player, "Too far away")
 		return
 	end
@@ -191,7 +235,13 @@ local function grapple(player, target)
 	beam.Attachment1 = endpoint
 	beam.Width0 = 0.65
 	beam.Width1 = 0.34
-	beam.Color = ColorSequence.new(Color3.fromRGB(255, 72, 148), Color3.fromRGB(255, 165, 205))
+	if player:GetAttribute("HasVIP") then
+		beam.Color = ColorSequence.new(Color3.fromRGB(255, 210, 40), Color3.fromRGB(255, 250, 175))
+	elseif player:GetAttribute("HasSuperTongue") then
+		beam.Color = ColorSequence.new(Color3.fromRGB(155, 70, 255), Color3.fromRGB(245, 120, 255))
+	else
+		beam.Color = ColorSequence.new(Color3.fromRGB(255, 72, 148), Color3.fromRGB(255, 165, 205))
+	end
 	beam.FaceCamera = true
 	beam.LightEmission = 0.35
 	beam.TextureSpeed = 2
@@ -201,7 +251,8 @@ local function grapple(player, target)
 	velocity.Name = "TonguePull"
 	velocity.Attachment0 = root:FindFirstChild("RootAttachment") or Instance.new("Attachment", root)
 	velocity.MaxForce = 70000
-	velocity.VectorVelocity = (result.Position - root.Position).Unit * CONFIG.PullSpeed + Vector3.new(0, 16, 0)
+	local pullSpeed = player:GetAttribute("HasSuperTongue") and CONFIG.PullSpeed * 1.35 or CONFIG.PullSpeed
+	velocity.VectorVelocity = (result.Position - root.Position).Unit * pullSpeed + Vector3.new(0, 16, 0)
 	velocity.RelativeTo = Enum.ActuatorRelativeTo.World
 	velocity.Parent = root
 
@@ -254,6 +305,48 @@ actionEvent.OnServerEvent:Connect(function(player, action, payload)
 		rebirth(player)
 	end
 end)
+
+MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player, passId, purchased)
+	if not purchased then return end
+	for _, pass in pairs(Monetization.GamePasses) do
+		if pass.Id == passId then
+			refreshBenefits(player)
+			if player.Character then applyCharacterBenefits(player, player.Character) end
+			feedbackEvent:FireClient(player, pass.Label .. " unlocked")
+			break
+		end
+	end
+end)
+
+MarketplaceService.ProcessReceipt = function(receipt)
+	local player = Players:GetPlayerByUserId(receipt.PlayerId)
+	if not player then return Enum.ProductPurchaseDecision.NotProcessedYet end
+	local stats = player:FindFirstChild("leaderstats")
+	local progress = player:FindFirstChild("Progress")
+	if not stats or not progress or not sessions[player] then return Enum.ProductPurchaseDecision.NotProcessedYet end
+	local productId = receipt.ProductId
+	if productId == Monetization.Products.Clicks500.Id and productId > 0 then
+		stats.Clicks.Value += 500
+		stats.TongueLength.Value = math.min(CONFIG.MaxTongue, stats.TongueLength.Value + 500)
+		feedbackEvent:FireClient(player, "500 Clicks added")
+	elseif productId == Monetization.Products.Clicks5000.Id and productId > 0 then
+		stats.Clicks.Value += 5000
+		stats.TongueLength.Value = math.min(CONFIG.MaxTongue, stats.TongueLength.Value + 5000)
+		feedbackEvent:FireClient(player, "5000 Clicks added")
+	elseif productId == Monetization.Products.SkipCheckpoint.Id and productId > 0 then
+		progress.Checkpoint.Value = math.min(6, progress.Checkpoint.Value + 1)
+		local world = workspace:FindFirstChild("TongueEscapeWorld")
+		local points = world and world:FindFirstChild("Checkpoints")
+		local target = points and points:FindFirstChild("Checkpoint" .. progress.Checkpoint.Value)
+		if target and player.Character then player.Character:PivotTo(target.CFrame + Vector3.new(0, 5, 0)) end
+		feedbackEvent:FireClient(player, "Checkpoint skipped")
+	else
+		return Enum.ProductPurchaseDecision.NotProcessedYet
+	end
+	sessions[player].dirty = true
+	savePlayer(player)
+	return Enum.ProductPurchaseDecision.PurchaseGranted
+end
 
 Players.PlayerAdded:Connect(loadPlayer)
 Players.PlayerRemoving:Connect(function(player)
