@@ -1,295 +1,261 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
 local MarketplaceService = game:GetService("MarketplaceService")
-local Monetization = require(ReplicatedStorage:WaitForChild("MonetizationConfig"))
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
 local remotes = ReplicatedStorage:WaitForChild("TongueRemotes")
-local actionEvent = remotes:WaitForChild("Action")
-local feedbackEvent = remotes:WaitForChild("Feedback")
-local camera = workspace.CurrentCamera
+local action = remotes:WaitForChild("Action")
+local feedback = remotes:WaitForChild("Feedback")
+local Shop = require(ReplicatedStorage:WaitForChild("MonetizationConfig"))
 
 local gui = Instance.new("ScreenGui")
-gui.Name = "TongueEscapeUI"
+gui.Name = "CashTongueUI"
 gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = true
 gui.Parent = player:WaitForChild("PlayerGui")
 
 local function round(object, radius)
 	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, radius)
-	corner.Parent = object
+	corner.CornerRadius, corner.Parent = UDim.new(0, radius), object
 end
 
-local function stroke(object, color, thickness)
-	local item = Instance.new("UIStroke")
-	item.Color = color
-	item.Thickness = thickness
-	item.Parent = object
+local function outline(object, color, width)
+	local stroke = Instance.new("UIStroke")
+	stroke.Color, stroke.Thickness, stroke.Parent = color, width, object
+end
+
+local function gradient(object, first, second)
+	local item = Instance.new("UIGradient")
+	item.Color = ColorSequence.new(first, second)
+	item.Rotation, item.Parent = 25, object
 end
 
 local title = Instance.new("TextLabel")
-title.Name = "Title"
-title.Size = UDim2.fromOffset(430, 58)
-title.Position = UDim2.new(0.5, -215, 0, 18)
-title.BackgroundColor3 = Color3.fromRGB(36, 21, 52)
-title.BackgroundTransparency = 0.08
+title.Size, title.Position = UDim2.fromOffset(470, 66), UDim2.new(0.5, -235, 0, 16)
+title.BackgroundColor3, title.BackgroundTransparency = Color3.fromRGB(42, 24, 65), 0.04
 title.Text = "CASH'S BIG FAT TONGUE ESCAPE"
-title.TextColor3 = Color3.fromRGB(255, 128, 188)
-title.Font = Enum.Font.GothamBlack
-title.TextScaled = true
+title.TextColor3, title.Font, title.TextScaled = Color3.fromRGB(255, 220, 54), Enum.Font.GothamBlack, true
 title.Parent = gui
-round(title, 18)
-stroke(title, Color3.fromRGB(255, 205, 70), 3)
+round(title, 20)
+outline(title, Color3.fromRGB(255, 84, 155), 3)
 
-local statsPanel = Instance.new("Frame")
-statsPanel.Size = UDim2.fromOffset(230, 170)
-statsPanel.Position = UDim2.fromOffset(18, 92)
-statsPanel.BackgroundColor3 = Color3.fromRGB(30, 24, 43)
-statsPanel.BackgroundTransparency = 0.08
-statsPanel.Parent = gui
-round(statsPanel, 18)
-stroke(statsPanel, Color3.fromRGB(255, 105, 170), 2)
+local stats = Instance.new("Frame")
+stats.Size, stats.Position = UDim2.fromOffset(235, 190), UDim2.fromOffset(18, 95)
+stats.BackgroundColor3, stats.BackgroundTransparency = Color3.fromRGB(34, 24, 52), 0.05
+stats.Parent = gui
+round(stats, 20)
+outline(stats, Color3.fromRGB(255, 84, 155), 2)
+
+local statsTitle = Instance.new("TextLabel")
+statsTitle.Size, statsTitle.Position = UDim2.new(1, -20, 0, 36), UDim2.fromOffset(10, 8)
+statsTitle.BackgroundTransparency, statsTitle.Text = 1, "YOUR TONGUE"
+statsTitle.TextColor3, statsTitle.Font, statsTitle.TextScaled = Color3.fromRGB(255, 212, 55), Enum.Font.GothamBlack, true
+statsTitle.Parent = stats
 
 local statsText = Instance.new("TextLabel")
-statsText.Size = UDim2.new(1, -24, 1, -20)
-statsText.Position = UDim2.fromOffset(12, 10)
-statsText.BackgroundTransparency = 1
-statsText.TextColor3 = Color3.new(1, 1, 1)
-statsText.TextXAlignment = Enum.TextXAlignment.Left
-statsText.TextYAlignment = Enum.TextYAlignment.Top
-statsText.Font = Enum.Font.GothamBold
-statsText.TextSize = 20
-statsText.Parent = statsPanel
+statsText.Size, statsText.Position = UDim2.new(1, -24, 1, -54), UDim2.fromOffset(12, 46)
+statsText.BackgroundTransparency, statsText.Text = 1, "Loading..."
+statsText.TextColor3, statsText.Font, statsText.TextSize = Color3.new(1, 1, 1), Enum.Font.GothamBold, 19
+statsText.TextXAlignment, statsText.TextYAlignment = Enum.TextXAlignment.Left, Enum.TextYAlignment.Top
+statsText.Parent = stats
 
-local function makeButton(name, text, position, color)
-	local button = Instance.new("TextButton")
-	button.Name = name
-	button.Size = UDim2.fromOffset(210, 56)
-	button.Position = position
-	button.AnchorPoint = Vector2.new(1, 1)
-	button.BackgroundColor3 = color
-	button.Text = text
-	button.TextColor3 = Color3.new(1, 1, 1)
-	button.Font = Enum.Font.GothamBlack
-	button.TextScaled = true
-	button.AutoButtonColor = true
-	button.Parent = gui
-	round(button, 16)
-	stroke(button, Color3.new(1, 1, 1), 2)
-	return button
+local zone = Instance.new("TextLabel")
+zone.Size, zone.Position = UDim2.fromOffset(310, 48), UDim2.new(0.5, -155, 0, 92)
+zone.BackgroundColor3, zone.BackgroundTransparency = Color3.fromRGB(32, 27, 48), 0.1
+zone.Text, zone.TextColor3, zone.Font, zone.TextScaled = "ZONE 1  CANDY MOUTH", Color3.new(1, 1, 1), Enum.Font.GothamBlack, true
+zone.Parent = gui
+round(zone, 15)
+
+local growth = Instance.new("TextLabel")
+growth.Size, growth.Position = UDim2.fromOffset(150, 52), UDim2.new(0.5, -75, 0, 147)
+growth.BackgroundTransparency, growth.TextTransparency = 1, 1
+growth.Text, growth.TextColor3, growth.Font, growth.TextScaled = "+1 TONGUE", Color3.fromRGB(255, 84, 155), Enum.Font.GothamBlack, true
+growth.Parent = gui
+
+local function button(name, text, position, color, size)
+	local item = Instance.new("TextButton")
+	item.Name, item.Text, item.Position = name, text, position
+	item.Size = size or UDim2.fromOffset(215, 58)
+	item.AnchorPoint = Vector2.new(1, 1)
+	item.BackgroundColor3, item.TextColor3 = color, Color3.new(1, 1, 1)
+	item.Font, item.TextScaled, item.AutoButtonColor, item.Parent = Enum.Font.GothamBlack, true, true, gui
+	round(item, 17)
+	outline(item, Color3.new(1, 1, 1), 2)
+	return item
 end
 
-local tongueButton = makeButton("TongueButton", "LICK + GRAPPLE", UDim2.new(1, -20, 1, -24), Color3.fromRGB(244, 74, 151))
-local upgradeButton = makeButton("UpgradeButton", "UPGRADE", UDim2.new(1, -20, 1, -92), Color3.fromRGB(70, 155, 255))
-local rebirthButton = makeButton("RebirthButton", "REBIRTH", UDim2.new(1, -20, 1, -160), Color3.fromRGB(145, 80, 240))
+local lick = button("Lick", "EXTEND TONGUE", UDim2.new(1, -18, 1, -22), Color3.fromRGB(245, 72, 148), UDim2.fromOffset(230, 66))
+local upgrade = button("Upgrade", "UPGRADE GROWTH", UDim2.new(1, -18, 1, -100), Color3.fromRGB(56, 157, 250))
+local rebirth = button("Rebirth", "REBIRTH", UDim2.new(1, -18, 1, -170), Color3.fromRGB(148, 76, 244))
+local shopButton = button("Shop", "SHOP", UDim2.new(1, -18, 0, 80), Color3.fromRGB(240, 171, 32), UDim2.fromOffset(145, 55))
 
 local crosshair = Instance.new("TextLabel")
-crosshair.Size = UDim2.fromOffset(40, 40)
-crosshair.Position = UDim2.new(0.5, -20, 0.5, -20)
-crosshair.BackgroundTransparency = 1
-crosshair.Text = "+"
-crosshair.TextColor3 = Color3.fromRGB(255, 90, 160)
-crosshair.TextStrokeTransparency = 0
-crosshair.Font = Enum.Font.GothamBlack
-crosshair.TextScaled = true
-crosshair.Parent = gui
+crosshair.Size, crosshair.Position = UDim2.fromOffset(46, 46), UDim2.new(0.5, -23, 0.5, -23)
+crosshair.BackgroundTransparency, crosshair.Text = 1, "+"
+crosshair.TextColor3, crosshair.TextStrokeTransparency = Color3.fromRGB(255, 80, 150), 0
+crosshair.Font, crosshair.TextScaled, crosshair.Parent = Enum.Font.GothamBlack, true, gui
 
-local hint = Instance.new("TextLabel")
-hint.Size = UDim2.fromOffset(500, 42)
-hint.Position = UDim2.new(0.5, -250, 1, -52)
-hint.BackgroundColor3 = Color3.fromRGB(25, 20, 35)
-hint.BackgroundTransparency = 0.2
-hint.Text = "Aim at a platform and click, tap, or press E"
-hint.TextColor3 = Color3.new(1, 1, 1)
-hint.Font = Enum.Font.GothamBold
-hint.TextScaled = true
-hint.Parent = gui
-round(hint, 14)
+local rangeLabel = Instance.new("TextLabel")
+rangeLabel.Size, rangeLabel.Position = UDim2.fromOffset(380, 46), UDim2.new(0.5, -190, 1, -55)
+rangeLabel.BackgroundColor3, rangeLabel.BackgroundTransparency = Color3.fromRGB(30, 24, 45), 0.15
+rangeLabel.Text, rangeLabel.TextColor3 = "Aim at a platform and extend your tongue", Color3.new(1, 1, 1)
+rangeLabel.Font, rangeLabel.TextScaled, rangeLabel.Parent = Enum.Font.GothamBold, true, gui
+round(rangeLabel, 15)
 
 local message = Instance.new("TextLabel")
-message.Size = UDim2.fromOffset(520, 64)
-message.Position = UDim2.new(0.5, -260, 0.5, 70)
-message.BackgroundColor3 = Color3.fromRGB(255, 80, 155)
-message.BackgroundTransparency = 1
-message.TextTransparency = 1
-message.TextColor3 = Color3.new(1, 1, 1)
-message.TextStrokeTransparency = 0.5
-message.Font = Enum.Font.GothamBlack
-message.TextScaled = true
-message.Parent = gui
+message.Size, message.Position = UDim2.fromOffset(520, 68), UDim2.new(0.5, -260, 0.5, 62)
+message.BackgroundColor3, message.BackgroundTransparency = Color3.fromRGB(245, 72, 148), 1
+message.TextTransparency, message.TextColor3 = 1, Color3.new(1, 1, 1)
+message.Font, message.TextScaled, message.Parent = Enum.Font.GothamBlack, true, gui
 round(message, 18)
 
-local messageToken = 0
-local function showMessage(text)
-	messageToken += 1
-	local token = messageToken
+local token = 0
+local function announce(text)
+	token += 1
+	local mine = token
 	message.Text = tostring(text)
-	TweenService:Create(message, TweenInfo.new(0.15), {BackgroundTransparency = 0.08, TextTransparency = 0}):Play()
-	task.delay(2.1, function()
-		if token == messageToken then
-			TweenService:Create(message, TweenInfo.new(0.35), {BackgroundTransparency = 1, TextTransparency = 1}):Play()
-		end
+	TweenService:Create(message, TweenInfo.new(0.16), {BackgroundTransparency = 0.08, TextTransparency = 0}):Play()
+	task.delay(2, function()
+		if token == mine then TweenService:Create(message, TweenInfo.new(0.3), {BackgroundTransparency = 1, TextTransparency = 1}):Play() end
 	end)
 end
-feedbackEvent.OnClientEvent:Connect(showMessage)
-
-local shopButton = Instance.new("TextButton")
-shopButton.Name = "ShopButton"
-shopButton.Size = UDim2.fromOffset(145, 52)
-shopButton.Position = UDim2.new(1, -165, 0, 18)
-shopButton.BackgroundColor3 = Color3.fromRGB(255, 190, 35)
-shopButton.Text = "🛒 SHOP"
-shopButton.TextColor3 = Color3.fromRGB(45, 25, 60)
-shopButton.Font = Enum.Font.GothamBlack
-shopButton.TextScaled = true
-shopButton.Parent = gui
-round(shopButton, 16)
-stroke(shopButton, Color3.new(1, 1, 1), 2)
 
 local shop = Instance.new("Frame")
-shop.Name = "PremiumShop"
-shop.Size = UDim2.fromOffset(430, 490)
-shop.Position = UDim2.new(0.5, -215, 0.5, -245)
-shop.BackgroundColor3 = Color3.fromRGB(31, 22, 48)
-shop.Visible = false
-shop.Parent = gui
+shop.Size, shop.Position = UDim2.fromOffset(440, 500), UDim2.new(0.5, -220, 0.5, -250)
+shop.BackgroundColor3, shop.Visible, shop.Parent = Color3.fromRGB(31, 22, 48), false, gui
 round(shop, 22)
-stroke(shop, Color3.fromRGB(255, 193, 50), 3)
+outline(shop, Color3.fromRGB(255, 195, 45), 3)
 
 local shopTitle = Instance.new("TextLabel")
-shopTitle.Size = UDim2.new(1, -70, 0, 55)
-shopTitle.Position = UDim2.fromOffset(18, 8)
-shopTitle.BackgroundTransparency = 1
-shopTitle.Text = "BIG FAT TONGUE SHOP"
-shopTitle.TextColor3 = Color3.fromRGB(255, 212, 62)
-shopTitle.Font = Enum.Font.GothamBlack
-shopTitle.TextScaled = true
-shopTitle.Parent = shop
+shopTitle.Size, shopTitle.Position = UDim2.new(1, -75, 0, 58), UDim2.fromOffset(18, 8)
+shopTitle.BackgroundTransparency, shopTitle.Text = 1, "BIG FAT TONGUE SHOP"
+shopTitle.TextColor3, shopTitle.Font, shopTitle.TextScaled, shopTitle.Parent = Color3.fromRGB(255, 215, 55), Enum.Font.GothamBlack, true, shop
 
 local close = Instance.new("TextButton")
-close.Size = UDim2.fromOffset(46, 46)
-close.Position = UDim2.new(1, -55, 0, 9)
-close.BackgroundColor3 = Color3.fromRGB(235, 70, 100)
-close.Text = "X"
-close.TextColor3 = Color3.new(1, 1, 1)
-close.Font = Enum.Font.GothamBlack
-close.TextScaled = true
-close.Parent = shop
+close.Size, close.Position = UDim2.fromOffset(48, 48), UDim2.new(1, -58, 0, 10)
+close.BackgroundColor3, close.Text = Color3.fromRGB(230, 64, 100), "X"
+close.TextColor3, close.Font, close.TextScaled, close.Parent = Color3.new(1, 1, 1), Enum.Font.GothamBlack, true, shop
 round(close, 14)
 
 local list = Instance.new("ScrollingFrame")
-list.Size = UDim2.new(1, -28, 1, -78)
-list.Position = UDim2.fromOffset(14, 66)
-list.BackgroundTransparency = 1
-list.BorderSizePixel = 0
-list.ScrollBarThickness = 6
-list.CanvasSize = UDim2.fromOffset(0, 540)
-list.Parent = shop
+list.Size, list.Position = UDim2.new(1, -28, 1, -82), UDim2.fromOffset(14, 68)
+list.BackgroundTransparency, list.BorderSizePixel, list.ScrollBarThickness = 1, 0, 6
+list.CanvasSize, list.Parent = UDim2.fromOffset(0, 550), shop
 local layout = Instance.new("UIListLayout")
-layout.Padding = UDim.new(0, 10)
-layout.Parent = list
+layout.Padding, layout.Parent = UDim.new(0, 10), list
 
-local function addShopItem(item, itemType, accent)
+local function product(item, kind, color)
 	local card = Instance.new("TextButton")
-	card.Size = UDim2.new(1, -10, 0, 80)
-	card.BackgroundColor3 = accent
+	card.Size, card.BackgroundColor3 = UDim2.new(1, -10, 0, 82), color
 	card.Text = item.Label .. "\n" .. item.Description
-	card.TextColor3 = Color3.new(1, 1, 1)
-	card.TextWrapped = true
-	card.Font = Enum.Font.GothamBold
-	card.TextSize = 15
+	card.TextColor3, card.TextWrapped, card.Font, card.TextSize = Color3.new(1, 1, 1), true, Enum.Font.GothamBold, 15
 	card.Parent = list
 	round(card, 15)
-	stroke(card, Color3.new(1, 1, 1), 1.5)
 	card.Activated:Connect(function()
-		if item.Id <= 0 then
-			showMessage("Publish first, then add this item ID")
-			return
-		end
-		if itemType == "Pass" then
-			MarketplaceService:PromptGamePassPurchase(player, item.Id)
-		else
-			MarketplaceService:PromptProductPurchase(player, item.Id)
-		end
+		if item.Id <= 0 then announce("Publish first, then add this item ID") return end
+		if kind == "Pass" then MarketplaceService:PromptGamePassPurchase(player, item.Id)
+		else MarketplaceService:PromptProductPurchase(player, item.Id) end
 	end)
 end
 
-addShopItem(Monetization.GamePasses.VIP, "Pass", Color3.fromRGB(210, 148, 25))
-addShopItem(Monetization.GamePasses.DoubleGrowth, "Pass", Color3.fromRGB(230, 70, 145))
-addShopItem(Monetization.GamePasses.SuperTongue, "Pass", Color3.fromRGB(130, 70, 225))
-addShopItem(Monetization.Products.Clicks500, "Product", Color3.fromRGB(55, 155, 235))
-addShopItem(Monetization.Products.Clicks5000, "Product", Color3.fromRGB(35, 185, 135))
-addShopItem(Monetization.Products.SkipCheckpoint, "Product", Color3.fromRGB(235, 100, 55))
+product(Shop.GamePasses.VIP, "Pass", Color3.fromRGB(204, 146, 26))
+product(Shop.GamePasses.DoubleGrowth, "Pass", Color3.fromRGB(226, 66, 143))
+product(Shop.GamePasses.SuperTongue, "Pass", Color3.fromRGB(131, 67, 224))
+product(Shop.Products.Clicks500, "Product", Color3.fromRGB(51, 153, 232))
+product(Shop.Products.Clicks5000, "Product", Color3.fromRGB(36, 181, 128))
+product(Shop.Products.SkipCheckpoint, "Product", Color3.fromRGB(231, 96, 52))
 
-shopButton.Activated:Connect(function() shop.Visible = not shop.Visible end)
-close.Activated:Connect(function() shop.Visible = false end)
-
-local function updateStats()
-	local stats = player:FindFirstChild("leaderstats")
-	local progress = player:FindFirstChild("Progress")
-	if not stats or not progress then return end
-	local multiplier = progress.ClickLevel.Value * math.max(1, stats.Rebirths.Value + 1)
-	statsText.Text = string.format(
-		"👅 Tongue  %d studs\n🖱 Clicks  %d\n🏆 Wins  %d\n✨ Rebirths  %d\n⚡ Power  +%d",
-		stats.TongueLength.Value,
-		stats.Clicks.Value,
-		stats.Wins.Value,
-		stats.Rebirths.Value,
-		multiplier
-	)
-	upgradeButton.Text = "UPGRADE  " .. (150 * progress.ClickLevel.Value)
-	rebirthButton.Text = "REBIRTH  " .. (1000 * (stats.Rebirths.Value + 1))
+local names = {"Candy Mouth", "Frozen Teeth", "Spicy Throat", "Cosmic Belly", "Golden Escape"}
+local function update()
+	local values, progress = player:FindFirstChild("leaderstats"), player:FindFirstChild("Progress")
+	if not values or not progress then return end
+	local amount = progress.GrowthLevel.Value * math.max(1, values.Rebirths.Value + 1)
+	if player:GetAttribute("HasDoubleGrowth") then amount *= 2 end
+	if player:GetAttribute("HasVIP") then amount = math.max(1, math.floor(amount * 1.5)) end
+	statsText.Text = string.format("Tongue  %d studs\nGrowth  +%d every second\nPoints  %d\nWins  %d\nRebirths  %d", values.TongueLength.Value, amount, values.Clicks.Value, values.Wins.Value, values.Rebirths.Value)
+	local current = math.clamp(progress.Checkpoint.Value + 1, 1, 5)
+	zone.Text = "ZONE " .. current .. "  " .. string.upper(names[current])
+	upgrade.Text = "UPGRADE  " .. 250 * progress.GrowthLevel.Value
+	rebirth.Text = "REBIRTH  " .. 3000 * (values.Rebirths.Value + 1)
 end
 
 task.spawn(function()
-	local stats = player:WaitForChild("leaderstats")
-	local progress = player:WaitForChild("Progress")
-	for _, value in ipairs(stats:GetChildren()) do
-		if value:IsA("ValueBase") then value.Changed:Connect(updateStats) end
-	end
-	for _, value in ipairs(progress:GetChildren()) do
-		if value:IsA("ValueBase") then value.Changed:Connect(updateStats) end
-	end
-	updateStats()
+	local values, progress = player:WaitForChild("leaderstats"), player:WaitForChild("Progress")
+	for _, object in ipairs(values:GetChildren()) do if object:IsA("ValueBase") then object.Changed:Connect(update) end end
+	for _, object in ipairs(progress:GetChildren()) do if object:IsA("ValueBase") then object.Changed:Connect(update) end end
+	update()
 end)
 
 local ready = true
-local function activateTongue()
-	if not ready then return end
+local function extend()
+	if not ready or shop.Visible then return end
 	ready = false
-	task.delay(0.13, function() ready = true end)
-	actionEvent:FireServer("Click")
-
-	camera = workspace.CurrentCamera
+	task.delay(0.3, function() ready = true end)
+	local camera = workspace.CurrentCamera
 	if not camera then return end
-	local viewport = camera.ViewportSize
-	local ray = camera:ViewportPointToRay(viewport.X * 0.5, viewport.Y * 0.5)
-	local character = player.Character
+	local center = camera.ViewportSize * 0.5
+	local ray = camera:ViewportPointToRay(center.X, center.Y)
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = character and {character} or {}
-	local result = workspace:Raycast(ray.Origin, ray.Direction * 2500, params)
-	if result then
-		actionEvent:FireServer("Grapple", result.Position)
-	end
+	params.FilterDescendantsInstances = player.Character and {player.Character} or {}
+	local result = workspace:Raycast(ray.Origin, ray.Direction * 10000, params)
+	if result then action:FireServer("Slide", result.Position) else announce("Aim directly at a coloured platform") end
 end
 
-tongueButton.Activated:Connect(activateTongue)
-upgradeButton.Activated:Connect(function() actionEvent:FireServer("Upgrade") end)
-rebirthButton.Activated:Connect(function() actionEvent:FireServer("Rebirth") end)
+feedback.OnClientEvent:Connect(function(kind, amount)
+	if kind == "Growth" then
+		growth.Text = "+" .. tostring(amount) .. " TONGUE"
+		growth.Position = UDim2.new(0.5, -75, 0, 147)
+		TweenService:Create(growth, TweenInfo.new(0.15), {TextTransparency = 0}):Play()
+		TweenService:Create(growth, TweenInfo.new(0.65), {Position = UDim2.new(0.5, -75, 0, 120), TextTransparency = 1}):Play()
+	elseif kind == "SlideStart" then
+		lick.Text = "SLIDING!"
+		local camera = workspace.CurrentCamera
+		if camera then TweenService:Create(camera, TweenInfo.new(0.2), {FieldOfView = 78}):Play() end
+	elseif kind == "Landed" then
+		lick.Text = "EXTEND TONGUE"
+		local camera = workspace.CurrentCamera
+		if camera then TweenService:Create(camera, TweenInfo.new(0.25), {FieldOfView = 70}):Play() end
+	else announce(kind) end
+end)
+
+lick.Activated:Connect(extend)
+upgrade.Activated:Connect(function() action:FireServer("Upgrade") end)
+rebirth.Activated:Connect(function() action:FireServer("Rebirth") end)
+shopButton.Activated:Connect(function() shop.Visible = not shop.Visible end)
+close.Activated:Connect(function() shop.Visible = false end)
 
 UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then return end
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.KeyCode == Enum.KeyCode.E or input.KeyCode == Enum.KeyCode.ButtonR2 then
-		activateTongue()
-	end
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.KeyCode == Enum.KeyCode.E or input.KeyCode == Enum.KeyCode.ButtonR2 then extend() end
 end)
 
 if UserInputService.TouchEnabled then
-	hint.Text = "Aim with the camera, then tap LICK + GRAPPLE"
-else
-	tongueButton.Size = UDim2.fromOffset(190, 48)
+	rangeLabel.Text = "Aim with the camera, then tap EXTEND TONGUE"
+	stats.Size = UDim2.fromOffset(210, 178)
+	shop.Size, shop.Position = UDim2.new(1, -30, 0.72, 0), UDim2.new(0, 15, 0.14, 0)
 end
+
+RunService.RenderStepped:Connect(function()
+	local camera = workspace.CurrentCamera
+	local values = player:FindFirstChild("leaderstats")
+	if not camera or not values then return end
+	local center = camera.ViewportSize * 0.5
+	local ray = camera:ViewportPointToRay(center.X, center.Y)
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = player.Character and {player.Character} or {}
+	local result = workspace:Raycast(ray.Origin, ray.Direction * 10000, params)
+	if result and result.Instance:GetAttribute("TongueTarget") then
+		local distance = player.Character and player.Character:FindFirstChild("Head") and (result.Position - player.Character.Head.Position).Magnitude or 0
+		local range = values.TongueLength.Value + (player:GetAttribute("HasSuperTongue") and 30 or 0)
+		crosshair.TextColor3 = distance <= range + 3 and Color3.fromRGB(80, 255, 130) or Color3.fromRGB(255, 75, 90)
+		rangeLabel.Text = math.floor(distance) .. " studs away   Your tongue: " .. range
+	else
+		crosshair.TextColor3 = Color3.fromRGB(255, 80, 150)
+		rangeLabel.Text = "Aim at a coloured platform"
+	end
+end)
