@@ -17,6 +17,22 @@ Version four replaces the old grapple prototype with the proper tongue escape lo
 9. Rebirths and upgrades increase passive growth.
 10. VIP, Double Growth, and Super Tongue remain supported.
 
+## Release candidate overhaul
+
+The release candidate combines all major pretest work into one installation.
+
+1. Five decorated zones with candy, teeth, fire, planets, coins, moving platforms, spinning hazards, lighting, atmosphere, and a finish arch
+2. Rounded animated tongue extension with saliva particles, retraction, sound, and premium colours
+3. Character mounting pose, visible tongue slide, landing recovery, and camera feedback
+4. Responsive interface with stats moved away from chat, limited distance signs, target distance, and reachable crosshair colour
+5. Built in extend, slide, landing, reward, and error sounds
+6. Daily streak rewards, five minute gifts, launch codes, slide quest, playtime rewards, and milestone achievements
+7. Four hatchable pets with growth multipliers
+8. Five tongue skins and four character trails
+9. First session tutorial and improved mobile layout
+
+Available codes are CASH, BIGTONGUE, and LAUNCH.
+
 ## Included
 
 1. Secure server controlled clicking and tongue growth
