@@ -211,6 +211,9 @@ feedback.OnClientEvent:Connect(function(kind, amount)
 		growth.Position = UDim2.new(0.5, -75, 0, 147)
 		TweenService:Create(growth, TweenInfo.new(0.15), {TextTransparency = 0}):Play()
 		TweenService:Create(growth, TweenInfo.new(0.65), {Position = UDim2.new(0.5, -75, 0, 120), TextTransparency = 1}):Play()
+	elseif kind == "TongueOut" then
+		lick.Text = "EXTENDING..."
+		crosshair.TextColor3 = Color3.fromRGB(255, 220, 55)
 	elseif kind == "SlideStart" then
 		lick.Text = "SLIDING!"
 		local camera = workspace.CurrentCamera
