@@ -8,7 +8,7 @@ local Shop = require(ReplicatedStorage:WaitForChild("MonetizationConfig"))
 
 local C = {
 	StartTongue = 40, MaxTongue = 10000, GrowthTime = 1,
-	SlideCooldown = 0.7, SlideSpeed = 72, UpgradeCost = 250,
+	SlideCooldown = 0.7, SlideSpeed = 40, UpgradeCost = 250,
 	RebirthCost = 3000, FinishReward = 1000, Zones = 5, Pads = 8,
 }
 
@@ -150,12 +150,22 @@ local function tongueBridge(player, origin, destination, lifetime)
 	local distance = (destination - origin).Magnitude
 	local bridge = Instance.new("Part")
 	bridge.Name = "ExtendedTongue"
-	bridge.Size = Vector3.new(2.8, 0.55, distance)
-	bridge.CFrame = CFrame.lookAt((origin + destination) * 0.5, destination)
+	bridge.Size = Vector3.new(2.8, 0.55, 0.4)
+	bridge.CFrame = CFrame.lookAt(origin, destination)
 	bridge.Color, bridge.Material = tongueColor(player), Enum.Material.Neon
-	bridge.Anchored, bridge.CanCollide, bridge.CanTouch, bridge.CanQuery = true, true, false, false
+	bridge.Anchored, bridge.CanCollide, bridge.CanTouch, bridge.CanQuery = true, false, false, false
 	bridge.Parent = workspace
+	local finalCFrame = CFrame.lookAt((origin + destination) * 0.5, destination)
+	local extendTween = TweenService:Create(
+		bridge,
+		TweenInfo.new(0.38, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+		{Size = Vector3.new(2.8, 0.55, distance), CFrame = finalCFrame}
+	)
+	extendTween:Play()
+	extendTween.Completed:Wait()
+	bridge.CanCollide = true
 	Debris:AddItem(bridge, lifetime)
+	return bridge
 end
 
 local function slide(player, target)
@@ -181,18 +191,39 @@ local function slide(player, target)
 	end
 
 	session.lastSlide, session.sliding = os.clock(), true
-	local destination = hit.Position + Vector3.new(0, 3.4, 0)
+	local tongueOrigin = head.Position + offset.Unit * 1.4
+	local destination = hit.Position + Vector3.new(0, 2.2, 0)
 	local speed = C.SlideSpeed * (player:GetAttribute("HasSuperTongue") and 1.25 or 1)
-	local duration = math.clamp((destination - root.Position).Magnitude / speed, 0.4, 1.5)
-	tongueBridge(player, head.Position, hit.Position, duration + 0.5)
+	local duration = math.clamp((destination - tongueOrigin).Magnitude / speed, 0.8, 2.6)
+	feedback:FireClient(player, "TongueOut")
+	local bridge = tongueBridge(player, tongueOrigin, hit.Position, duration + 1.2)
 	feedback:FireClient(player, "SlideStart", duration)
 	humanoid.AutoRotate, humanoid.PlatformStand, root.Anchored = false, true, true
-	local tween = TweenService:Create(root, TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {CFrame = CFrame.new(destination)})
+	local direction = (destination - tongueOrigin).Unit
+	local slideStart = tongueOrigin + direction * 2 + Vector3.new(0, 1.25, 0)
+	local slideEnd = destination + Vector3.new(0, 1.25, 0)
+	local slideRotation = CFrame.lookAt(Vector3.zero, direction) * CFrame.Angles(math.rad(-72), 0, 0)
+	local mountTween = TweenService:Create(
+		root,
+		TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{CFrame = CFrame.new(slideStart) * slideRotation.Rotation}
+	)
+	mountTween:Play()
+	mountTween.Completed:Wait()
+	local tween = TweenService:Create(
+		root,
+		TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+		{CFrame = CFrame.new(slideEnd) * slideRotation.Rotation}
+	)
 	tween:Play()
 	tween.Completed:Wait()
 	if root.Parent and humanoid.Parent then
+		root.CFrame = CFrame.new(hit.Position + Vector3.new(0, 3.4, 0))
 		root.Anchored, humanoid.PlatformStand, humanoid.AutoRotate = false, false, true
 		humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+	end
+	if bridge and bridge.Parent then
+		TweenService:Create(bridge, TweenInfo.new(0.25), {Transparency = 1, Size = Vector3.new(0.4, 0.2, 0.4)}):Play()
 	end
 	session.sliding = false
 	feedback:FireClient(player, "Landed")
