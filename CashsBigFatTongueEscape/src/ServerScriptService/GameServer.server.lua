@@ -345,16 +345,17 @@ local function buildWorld()
 			pad:SetAttribute("Zone", zone)
 			if index == 1 then sign(pad, "ZONE " .. zone .. "\n" .. NAMES[zone], COLORS[zone]) end
 			if index == C.Pads then
+				local checkpointZone = zone
 				pad.Name, pad.Material = "ZoneCheckpoint" .. zone, Enum.Material.Neon
 				local checkpoint = block(points, "Checkpoint" .. zone, Vector3.new(2, 1, 2), current + Vector3.new(0, 3, 0), Color3.new(1, 1, 1))
 				checkpoint.Transparency, checkpoint.CanCollide = 1, false
 				pad.Touched:Connect(function(hit)
 					local player = Players:GetPlayerFromCharacter(hit.Parent)
 					local progress = player and player:FindFirstChild("Progress")
-					if progress and zone > progress.Checkpoint.Value then
-						progress.Checkpoint.Value = zone
+					if progress and checkpointZone > progress.Checkpoint.Value then
+						progress.Checkpoint.Value = checkpointZone
 						sessions[player].dirty = true
-						feedback:FireClient(player, "ZONE COMPLETE: " .. NAMES[zone])
+						feedback:FireClient(player, "ZONE COMPLETE: " .. NAMES[checkpointZone])
 					end
 				end)
 			end
