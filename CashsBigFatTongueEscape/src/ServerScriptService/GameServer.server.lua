@@ -1,363 +1,240 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local DataStoreService = game:GetService("DataStoreService")
-local Debris = game:GetService("Debris")
 local MarketplaceService = game:GetService("MarketplaceService")
-local Monetization = require(ReplicatedStorage:WaitForChild("MonetizationConfig"))
+local TweenService = game:GetService("TweenService")
+local Debris = game:GetService("Debris")
+local Shop = require(ReplicatedStorage:WaitForChild("MonetizationConfig"))
 
-local CONFIG = {
-	StartingTongue = 45,
-	ClickCooldown = 0.12,
-	GrappleCooldown = 0.35,
-	PullSpeed = 82,
-	PullDuration = 0.55,
-	MaxTongue = 2500,
-	FinishReward = 250,
-	RebirthBaseCost = 1000,
-	UpgradeBaseCost = 150
+local C = {
+	StartTongue = 40, MaxTongue = 10000, GrowthTime = 1,
+	SlideCooldown = 0.7, SlideSpeed = 72, UpgradeCost = 250,
+	RebirthCost = 3000, FinishReward = 1000, Zones = 5, Pads = 8,
 }
 
 local remotes = ReplicatedStorage:FindFirstChild("TongueRemotes") or Instance.new("Folder")
 remotes.Name = "TongueRemotes"
 remotes.Parent = ReplicatedStorage
-
-local actionEvent = remotes:FindFirstChild("Action") or Instance.new("RemoteEvent")
-actionEvent.Name = "Action"
-actionEvent.Parent = remotes
-
-local feedbackEvent = remotes:FindFirstChild("Feedback") or Instance.new("RemoteEvent")
-feedbackEvent.Name = "Feedback"
-feedbackEvent.Parent = remotes
+local action = remotes:FindFirstChild("Action") or Instance.new("RemoteEvent")
+action.Name = "Action"
+action.Parent = remotes
+local feedback = remotes:FindFirstChild("Feedback") or Instance.new("RemoteEvent")
+feedback.Name = "Feedback"
+feedback.Parent = remotes
 
 local store
-pcall(function()
-	store = DataStoreService:GetDataStore("CashsBigFatTongueEscapeV1")
-end)
+pcall(function() store = DataStoreService:GetDataStore("CashsBigFatTongueEscapeV4") end)
 local sessions = {}
 
-local function makeValue(className, name, value, parent)
+local function value(className, name, initial, parent)
 	local item = Instance.new(className)
-	item.Name = name
-	item.Value = value
-	item.Parent = parent
+	item.Name, item.Value, item.Parent = name, initial, parent
 	return item
 end
 
-local function defaultData()
-	return {
-		Clicks = 0,
-		TongueLength = CONFIG.StartingTongue,
-		Wins = 0,
-		Rebirths = 0,
-		Checkpoint = 0,
-		ClickLevel = 1
-	}
+local function defaults()
+	return {Clicks = 0, TongueLength = C.StartTongue, Wins = 0, Rebirths = 0, Checkpoint = 0, GrowthLevel = 1}
 end
 
-local function sanitize(raw)
-	local data = defaultData()
+local function clean(raw)
+	local data = defaults()
 	if type(raw) == "table" then
 		for key, fallback in pairs(data) do
-			local value = tonumber(raw[key])
-			if value then
-				data[key] = math.max(0, math.floor(value))
-			else
-				data[key] = fallback
-			end
+			local number = tonumber(raw[key])
+			data[key] = number and math.max(0, math.floor(number)) or fallback
 		end
 	end
-	data.TongueLength = math.clamp(data.TongueLength, CONFIG.StartingTongue, CONFIG.MaxTongue)
-	data.ClickLevel = math.max(1, data.ClickLevel)
+	data.TongueLength = math.clamp(data.TongueLength, C.StartTongue, C.MaxTongue)
+	data.GrowthLevel = math.max(1, data.GrowthLevel)
+	data.Checkpoint = math.clamp(data.Checkpoint, 0, C.Zones)
 	return data
 end
 
-local function ownsPass(player, pass)
-	if not pass or pass.Id <= 0 then return false end
-	local ok, owned = pcall(function()
-		return MarketplaceService:UserOwnsGamePassAsync(player.UserId, pass.Id)
-	end)
-	return ok and owned
-end
-
-local function refreshBenefits(player)
-	player:SetAttribute("HasVIP", ownsPass(player, Monetization.GamePasses.VIP))
-	player:SetAttribute("HasDoubleGrowth", ownsPass(player, Monetization.GamePasses.DoubleGrowth))
-	player:SetAttribute("HasSuperTongue", ownsPass(player, Monetization.GamePasses.SuperTongue))
-end
-
-local function applyCharacterBenefits(player, character)
-	local humanoid = character:WaitForChild("Humanoid", 5)
-	local head = character:WaitForChild("Head", 5)
-
-	if head and not character:FindFirstChild("FatTongue") then
-		local tongue = Instance.new("Part")
-		tongue.Name = "FatTongue"
-		tongue.Color = Color3.fromRGB(255, 84, 155)
-		tongue.Material = Enum.Material.SmoothPlastic
-		tongue.CanCollide = false
-		tongue.CanTouch = false
-		tongue.CanQuery = false
-		tongue.Massless = true
-		tongue.CastShadow = false
-		tongue.Parent = character
-
-		local weld = Instance.new("Weld")
-		weld.Name = "TongueWeld"
-		weld.Part0 = head
-		weld.Part1 = tongue
-		weld.Parent = tongue
-
-		local function resizeTongue()
-			local stats = player:FindFirstChild("leaderstats")
-			local value = stats and stats:FindFirstChild("TongueLength")
-			local visibleLength = value and math.clamp(1.8 + value.Value * 0.045, 2.5, 10) or 3
-			tongue.Size = Vector3.new(0.75, 0.34, visibleLength)
-			weld.C0 = CFrame.new(0, -0.22, -0.45 - visibleLength * 0.5)
-			if player:GetAttribute("HasVIP") then
-				tongue.Color = Color3.fromRGB(255, 210, 40)
-				tongue.Material = Enum.Material.Neon
-			elseif player:GetAttribute("HasSuperTongue") then
-				tongue.Color = Color3.fromRGB(170, 75, 255)
-				tongue.Material = Enum.Material.Neon
-			end
-		end
-
-		resizeTongue()
-		local stats = player:FindFirstChild("leaderstats")
-		local lengthValue = stats and stats:FindFirstChild("TongueLength")
-		if lengthValue then lengthValue.Changed:Connect(resizeTongue) end
-	end
-	if player:GetAttribute("HasVIP") and humanoid then humanoid.WalkSpeed = 20 end
-	if player:GetAttribute("HasVIP") and head and not head:FindFirstChild("VIPTag") then
-		local tag = Instance.new("BillboardGui")
-		tag.Name = "VIPTag"
-		tag.Size = UDim2.fromOffset(120, 30)
-		tag.StudsOffset = Vector3.new(0, 2.8, 0)
-		tag.AlwaysOnTop = true
-		tag.Parent = head
-		local label = Instance.new("TextLabel")
-		label.Size = UDim2.fromScale(1, 1)
-		label.BackgroundTransparency = 1
-		label.Text = "👑 VIP"
-		label.TextColor3 = Color3.fromRGB(255, 220, 55)
-		label.TextStrokeTransparency = 0
-		label.Font = Enum.Font.GothamBlack
-		label.TextScaled = true
-		label.Parent = tag
-	end
-end
-
-local function loadPlayer(player)
-	local data = defaultData()
-	local ok, result = false, nil
-	if store then
-		ok, result = pcall(function()
-			return store:GetAsync("p_" .. player.UserId)
-		end)
-	end
-	if ok then
-		data = sanitize(result)
-	end
-
-	local leaderstats = Instance.new("Folder")
-	leaderstats.Name = "leaderstats"
-	leaderstats.Parent = player
-	makeValue("IntValue", "Clicks", data.Clicks, leaderstats)
-	makeValue("IntValue", "TongueLength", data.TongueLength, leaderstats)
-	makeValue("IntValue", "Wins", data.Wins, leaderstats)
-	makeValue("IntValue", "Rebirths", data.Rebirths, leaderstats)
-
-	local progress = Instance.new("Folder")
-	progress.Name = "Progress"
-	progress.Parent = player
-	makeValue("IntValue", "Checkpoint", data.Checkpoint, progress)
-	makeValue("IntValue", "ClickLevel", data.ClickLevel, progress)
-
-	sessions[player] = {lastClick = 0, lastGrapple = 0, dirty = false}
-	refreshBenefits(player)
-
-	player.CharacterAdded:Connect(function(character)
-		applyCharacterBenefits(player, character)
-		task.wait(0.25)
-		local checkpoint = progress.Checkpoint.Value
-		local world = workspace:FindFirstChild("TongueEscapeWorld")
-		local checkpoints = world and world:FindFirstChild("Checkpoints")
-		local target = checkpoints and checkpoints:FindFirstChild("Checkpoint" .. checkpoint)
-		local root = character:FindFirstChild("HumanoidRootPart")
-		if target and root then
-			character:PivotTo(target.CFrame + Vector3.new(0, 5, 0))
-		end
-	end)
-end
-
 local function snapshot(player)
-	local stats = player:FindFirstChild("leaderstats")
-	local progress = player:FindFirstChild("Progress")
-	if not stats or not progress then return nil end
+	local stats, progress = player:FindFirstChild("leaderstats"), player:FindFirstChild("Progress")
+	if not stats or not progress then return end
 	return {
-		Clicks = stats.Clicks.Value,
-		TongueLength = stats.TongueLength.Value,
-		Wins = stats.Wins.Value,
-		Rebirths = stats.Rebirths.Value,
-		Checkpoint = progress.Checkpoint.Value,
-		ClickLevel = progress.ClickLevel.Value
+		Clicks = stats.Clicks.Value, TongueLength = stats.TongueLength.Value,
+		Wins = stats.Wins.Value, Rebirths = stats.Rebirths.Value,
+		Checkpoint = progress.Checkpoint.Value, GrowthLevel = progress.GrowthLevel.Value,
 	}
 end
 
-local function savePlayer(player)
+local function save(player)
 	if not store then return end
 	local data = snapshot(player)
 	if not data then return end
-	pcall(function()
-		store:UpdateAsync("p_" .. player.UserId, function()
-			return data
-		end)
+	pcall(function() store:UpdateAsync("player_" .. player.UserId, function() return data end) end)
+end
+
+local function owns(player, pass)
+	if not pass or pass.Id <= 0 then return false end
+	local ok, result = pcall(function() return MarketplaceService:UserOwnsGamePassAsync(player.UserId, pass.Id) end)
+	return ok and result
+end
+
+local function refreshPasses(player)
+	player:SetAttribute("HasVIP", owns(player, Shop.GamePasses.VIP))
+	player:SetAttribute("HasDoubleGrowth", owns(player, Shop.GamePasses.DoubleGrowth))
+	player:SetAttribute("HasSuperTongue", owns(player, Shop.GamePasses.SuperTongue))
+end
+
+local function growth(player)
+	local stats, progress = player:FindFirstChild("leaderstats"), player:FindFirstChild("Progress")
+	if not stats or not progress then return 1 end
+	local amount = progress.GrowthLevel.Value * math.max(1, stats.Rebirths.Value + 1)
+	if player:GetAttribute("HasDoubleGrowth") then amount *= 2 end
+	if player:GetAttribute("HasVIP") then amount = math.max(1, math.floor(amount * 1.5)) end
+	return amount
+end
+
+local function tongueColor(player)
+	if player:GetAttribute("HasVIP") then return Color3.fromRGB(255, 214, 45) end
+	if player:GetAttribute("HasSuperTongue") then return Color3.fromRGB(172, 74, 255) end
+	return Color3.fromRGB(255, 82, 154)
+end
+
+local function mouthTongue(player, character)
+	local head = character:WaitForChild("Head", 5)
+	if not head then return end
+	local old = character:FindFirstChild("CashTongueTip")
+	if old then old:Destroy() end
+	local tongue = Instance.new("Part")
+	tongue.Name = "CashTongueTip"
+	tongue.Size = Vector3.new(0.85, 0.38, 2.4)
+	tongue.Color = tongueColor(player)
+	local premiumTongue = player:GetAttribute("HasVIP") or player:GetAttribute("HasSuperTongue")
+	tongue.Material = premiumTongue and Enum.Material.Neon or Enum.Material.SmoothPlastic
+	tongue.CanCollide, tongue.CanTouch, tongue.CanQuery = false, false, false
+	tongue.Massless, tongue.CastShadow, tongue.Parent = true, false, character
+	local weld = Instance.new("Weld")
+	weld.Part0, weld.Part1, weld.C0, weld.Parent = head, tongue, CFrame.new(0, -0.23, -1.55), tongue
+end
+
+local function checkpointTeleport(player, character)
+	local progress = player:FindFirstChild("Progress")
+	local world = workspace:FindFirstChild("CashTongueWorld")
+	local points = world and world:FindFirstChild("CheckpointSpawns")
+	local target = points and progress and points:FindFirstChild("Checkpoint" .. progress.Checkpoint.Value)
+	if target then character:PivotTo(target.CFrame + Vector3.new(0, 4, 0)) end
+end
+
+local function load(player)
+	local data = defaults()
+	if store then
+		local ok, result = pcall(function() return store:GetAsync("player_" .. player.UserId) end)
+		if ok then data = clean(result) end
+	end
+	local stats = Instance.new("Folder")
+	stats.Name, stats.Parent = "leaderstats", player
+	value("IntValue", "TongueLength", data.TongueLength, stats)
+	value("IntValue", "Clicks", data.Clicks, stats)
+	value("IntValue", "Wins", data.Wins, stats)
+	value("IntValue", "Rebirths", data.Rebirths, stats)
+	local progress = Instance.new("Folder")
+	progress.Name, progress.Parent = "Progress", player
+	value("IntValue", "Checkpoint", data.Checkpoint, progress)
+	value("IntValue", "GrowthLevel", data.GrowthLevel, progress)
+	sessions[player] = {lastSlide = 0, sliding = false, dirty = false}
+	refreshPasses(player)
+	player.CharacterAdded:Connect(function(character)
+		mouthTongue(player, character)
+		local humanoid = character:WaitForChild("Humanoid", 5)
+		if humanoid and player:GetAttribute("HasVIP") then humanoid.WalkSpeed = 20 end
+		task.wait(0.2)
+		checkpointTeleport(player, character)
 	end)
 end
 
-local function click(player)
-	local session = sessions[player]
-	local stats = player:FindFirstChild("leaderstats")
-	local progress = player:FindFirstChild("Progress")
-	if not session or not stats or not progress then return end
-	local now = os.clock()
-	if now - session.lastClick < CONFIG.ClickCooldown then return end
-	session.lastClick = now
-	local gain = progress.ClickLevel.Value * math.max(1, stats.Rebirths.Value + 1)
-	if player:GetAttribute("HasDoubleGrowth") then gain *= 2 end
-	if player:GetAttribute("HasVIP") then gain = math.max(1, math.floor(gain * 1.5)) end
-	stats.Clicks.Value += gain
-	stats.TongueLength.Value = math.min(CONFIG.MaxTongue, stats.TongueLength.Value + gain)
-	session.dirty = true
+local function tongueBridge(player, origin, destination, lifetime)
+	local distance = (destination - origin).Magnitude
+	local bridge = Instance.new("Part")
+	bridge.Name = "ExtendedTongue"
+	bridge.Size = Vector3.new(2.8, 0.55, distance)
+	bridge.CFrame = CFrame.lookAt((origin + destination) * 0.5, destination)
+	bridge.Color, bridge.Material = tongueColor(player), Enum.Material.Neon
+	bridge.Anchored, bridge.CanCollide, bridge.CanTouch, bridge.CanQuery = true, true, false, false
+	bridge.Parent = workspace
+	Debris:AddItem(bridge, lifetime)
 end
 
-local function grapple(player, target)
-	if typeof(target) ~= "Vector3" then return end
-	local session = sessions[player]
-	local character = player.Character
-	local stats = player:FindFirstChild("leaderstats")
+local function slide(player, target)
+	local session, character, stats = sessions[player], player.Character, player:FindFirstChild("leaderstats")
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	local head = character and character:FindFirstChild("Head")
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-	if not session or not stats or not root or not head or not humanoid or humanoid.Health <= 0 then return end
-
-	local now = os.clock()
-	if now - session.lastGrapple < CONFIG.GrappleCooldown then return end
+	if not session or not stats or not root or not head or not humanoid or typeof(target) ~= "Vector3" then return end
+	if session.sliding or humanoid.Health <= 0 or os.clock() - session.lastSlide < C.SlideCooldown then return end
 	local offset = target - head.Position
-	local distance = offset.Magnitude
-	local premiumRange = player:GetAttribute("HasSuperTongue") and 30 or 0
-	if distance < 3 or distance > stats.TongueLength.Value + premiumRange + 2 then
-		feedbackEvent:FireClient(player, "Too far away")
+	local maximum = stats.TongueLength.Value + (player:GetAttribute("HasSuperTongue") and 30 or 0)
+	if offset.Magnitude > maximum + 3 then
+		feedback:FireClient(player, "Too far! Need " .. math.ceil(offset.Magnitude) .. " studs")
+		return
+	end
+	local params = RaycastParams.new()
+	params.FilterType, params.FilterDescendantsInstances = Enum.RaycastFilterType.Exclude, {character}
+	local hit = workspace:Raycast(head.Position, offset, params)
+	if not hit or (hit.Position - target).Magnitude > 4 then return end
+	if not hit.Instance:GetAttribute("TongueTarget") then
+		feedback:FireClient(player, "Aim at a coloured platform")
 		return
 	end
 
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = {character}
-	local result = workspace:Raycast(head.Position, offset, params)
-	if not result or (result.Position - target).Magnitude > 4 then return end
-	session.lastGrapple = now
-
-	local mouth = Instance.new("Attachment")
-	mouth.Name = "TongueMouth"
-	mouth.Position = Vector3.new(0, -0.15, -0.52)
-	mouth.Parent = head
-
-	local anchor = Instance.new("Part")
-	anchor.Name = "TongueAnchor"
-	anchor.Size = Vector3.new(0.2, 0.2, 0.2)
-	anchor.Transparency = 1
-	anchor.Anchored = true
-	anchor.CanCollide = false
-	anchor.CanQuery = false
-	anchor.Position = result.Position
-	anchor.Parent = workspace
-	local endpoint = Instance.new("Attachment")
-	endpoint.Parent = anchor
-
-	local beam = Instance.new("Beam")
-	beam.Attachment0 = mouth
-	beam.Attachment1 = endpoint
-	beam.Width0 = 0.65
-	beam.Width1 = 0.34
-	if player:GetAttribute("HasVIP") then
-		beam.Color = ColorSequence.new(Color3.fromRGB(255, 210, 40), Color3.fromRGB(255, 250, 175))
-	elseif player:GetAttribute("HasSuperTongue") then
-		beam.Color = ColorSequence.new(Color3.fromRGB(155, 70, 255), Color3.fromRGB(245, 120, 255))
-	else
-		beam.Color = ColorSequence.new(Color3.fromRGB(255, 72, 148), Color3.fromRGB(255, 165, 205))
+	session.lastSlide, session.sliding = os.clock(), true
+	local destination = hit.Position + Vector3.new(0, 3.4, 0)
+	local speed = C.SlideSpeed * (player:GetAttribute("HasSuperTongue") and 1.25 or 1)
+	local duration = math.clamp((destination - root.Position).Magnitude / speed, 0.4, 1.5)
+	tongueBridge(player, head.Position, hit.Position, duration + 0.5)
+	feedback:FireClient(player, "SlideStart", duration)
+	humanoid.AutoRotate, humanoid.PlatformStand, root.Anchored = false, true, true
+	local tween = TweenService:Create(root, TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {CFrame = CFrame.new(destination)})
+	tween:Play()
+	tween.Completed:Wait()
+	if root.Parent and humanoid.Parent then
+		root.Anchored, humanoid.PlatformStand, humanoid.AutoRotate = false, false, true
+		humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
 	end
-	beam.FaceCamera = true
-	beam.LightEmission = 0.35
-	beam.TextureSpeed = 2
-	beam.Parent = mouth
-
-	local velocity = Instance.new("LinearVelocity")
-	velocity.Name = "TonguePull"
-	velocity.Attachment0 = root:FindFirstChild("RootAttachment") or Instance.new("Attachment", root)
-	velocity.MaxForce = 70000
-	local pullSpeed = player:GetAttribute("HasSuperTongue") and CONFIG.PullSpeed * 1.35 or CONFIG.PullSpeed
-	velocity.VectorVelocity = (result.Position - root.Position).Unit * pullSpeed + Vector3.new(0, 16, 0)
-	velocity.RelativeTo = Enum.ActuatorRelativeTo.World
-	velocity.Parent = root
-
-	Debris:AddItem(mouth, CONFIG.PullDuration)
-	Debris:AddItem(anchor, CONFIG.PullDuration)
-	Debris:AddItem(velocity, CONFIG.PullDuration)
+	session.sliding = false
+	feedback:FireClient(player, "Landed")
 end
 
-local function buyUpgrade(player)
-	local stats = player:FindFirstChild("leaderstats")
-	local progress = player:FindFirstChild("Progress")
+local function upgrade(player)
+	local stats, progress = player:FindFirstChild("leaderstats"), player:FindFirstChild("Progress")
 	if not stats or not progress then return end
-	local cost = CONFIG.UpgradeBaseCost * progress.ClickLevel.Value
-	if stats.Clicks.Value < cost then
-		feedbackEvent:FireClient(player, "Need " .. cost .. " clicks")
-		return
-	end
+	local cost = C.UpgradeCost * progress.GrowthLevel.Value
+	if stats.Clicks.Value < cost then feedback:FireClient(player, "Need " .. cost .. " growth points") return end
 	stats.Clicks.Value -= cost
-	progress.ClickLevel.Value += 1
+	progress.GrowthLevel.Value += 1
 	sessions[player].dirty = true
-	feedbackEvent:FireClient(player, "Click power upgraded")
+	feedback:FireClient(player, "Growth upgraded to +" .. growth(player))
 end
 
 local function rebirth(player)
-	local stats = player:FindFirstChild("leaderstats")
-	local progress = player:FindFirstChild("Progress")
+	local stats, progress = player:FindFirstChild("leaderstats"), player:FindFirstChild("Progress")
 	if not stats or not progress then return end
-	local cost = CONFIG.RebirthBaseCost * (stats.Rebirths.Value + 1)
-	if stats.Clicks.Value < cost then
-		feedbackEvent:FireClient(player, "Need " .. cost .. " clicks")
-		return
-	end
-	stats.Clicks.Value = 0
-	stats.TongueLength.Value = CONFIG.StartingTongue
+	local cost = C.RebirthCost * (stats.Rebirths.Value + 1)
+	if stats.Clicks.Value < cost then feedback:FireClient(player, "Need " .. cost .. " growth points") return end
+	stats.Clicks.Value, stats.TongueLength.Value = 0, C.StartTongue
 	stats.Rebirths.Value += 1
 	progress.Checkpoint.Value = 0
 	sessions[player].dirty = true
-	feedbackEvent:FireClient(player, "Rebirth complete")
 	player:LoadCharacter()
+	feedback:FireClient(player, "Rebirth complete!")
 end
 
-actionEvent.OnServerEvent:Connect(function(player, action, payload)
-	if action == "Click" then
-		click(player)
-	elseif action == "Grapple" then
-		grapple(player, payload)
-	elseif action == "Upgrade" then
-		buyUpgrade(player)
-	elseif action == "Rebirth" then
-		rebirth(player)
-	end
+action.OnServerEvent:Connect(function(player, request, payload)
+	if request == "Slide" then task.spawn(slide, player, payload)
+	elseif request == "Upgrade" then upgrade(player)
+	elseif request == "Rebirth" then rebirth(player) end
 end)
 
-MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player, passId, purchased)
-	if not purchased then return end
-	for _, pass in pairs(Monetization.GamePasses) do
-		if pass.Id == passId then
-			refreshBenefits(player)
-			if player.Character then applyCharacterBenefits(player, player.Character) end
-			feedbackEvent:FireClient(player, pass.Label .. " unlocked")
+MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player, id, bought)
+	if not bought then return end
+	for _, pass in pairs(Shop.GamePasses) do
+		if pass.Id == id then
+			refreshPasses(player)
+			if player.Character then mouthTongue(player, player.Character) end
+			feedback:FireClient(player, pass.Label .. " unlocked!")
 			break
 		end
 	end
@@ -366,157 +243,141 @@ end)
 MarketplaceService.ProcessReceipt = function(receipt)
 	local player = Players:GetPlayerByUserId(receipt.PlayerId)
 	if not player then return Enum.ProductPurchaseDecision.NotProcessedYet end
-	local stats = player:FindFirstChild("leaderstats")
-	local progress = player:FindFirstChild("Progress")
-	if not stats or not progress or not sessions[player] then return Enum.ProductPurchaseDecision.NotProcessedYet end
-	local productId = receipt.ProductId
-	if productId == Monetization.Products.Clicks500.Id and productId > 0 then
+	local stats, progress = player:FindFirstChild("leaderstats"), player:FindFirstChild("Progress")
+	if not stats or not progress then return Enum.ProductPurchaseDecision.NotProcessedYet end
+	local id = receipt.ProductId
+	if id > 0 and id == Shop.Products.Clicks500.Id then
 		stats.Clicks.Value += 500
-		stats.TongueLength.Value = math.min(CONFIG.MaxTongue, stats.TongueLength.Value + 500)
-		feedbackEvent:FireClient(player, "500 Clicks added")
-	elseif productId == Monetization.Products.Clicks5000.Id and productId > 0 then
+		stats.TongueLength.Value = math.min(C.MaxTongue, stats.TongueLength.Value + 500)
+	elseif id > 0 and id == Shop.Products.Clicks5000.Id then
 		stats.Clicks.Value += 5000
-		stats.TongueLength.Value = math.min(CONFIG.MaxTongue, stats.TongueLength.Value + 5000)
-		feedbackEvent:FireClient(player, "5000 Clicks added")
-	elseif productId == Monetization.Products.SkipCheckpoint.Id and productId > 0 then
-		progress.Checkpoint.Value = math.min(6, progress.Checkpoint.Value + 1)
-		local world = workspace:FindFirstChild("TongueEscapeWorld")
-		local points = world and world:FindFirstChild("Checkpoints")
-		local target = points and points:FindFirstChild("Checkpoint" .. progress.Checkpoint.Value)
-		if target and player.Character then player.Character:PivotTo(target.CFrame + Vector3.new(0, 5, 0)) end
-		feedbackEvent:FireClient(player, "Checkpoint skipped")
-	else
-		return Enum.ProductPurchaseDecision.NotProcessedYet
-	end
-	sessions[player].dirty = true
-	savePlayer(player)
+		stats.TongueLength.Value = math.min(C.MaxTongue, stats.TongueLength.Value + 5000)
+	elseif id > 0 and id == Shop.Products.SkipCheckpoint.Id then
+		progress.Checkpoint.Value = math.min(C.Zones, progress.Checkpoint.Value + 1)
+		if player.Character then checkpointTeleport(player, player.Character) end
+	else return Enum.ProductPurchaseDecision.NotProcessedYet end
+	if sessions[player] then sessions[player].dirty = true end
+	save(player)
+	feedback:FireClient(player, "Purchase delivered!")
 	return Enum.ProductPurchaseDecision.PurchaseGranted
 end
 
-Players.PlayerAdded:Connect(loadPlayer)
-Players.PlayerRemoving:Connect(function(player)
-	savePlayer(player)
-	sessions[player] = nil
-end)
-
-game:BindToClose(function()
-	for _, player in ipairs(Players:GetPlayers()) do
-		savePlayer(player)
-	end
-	task.wait(2)
-end)
+Players.PlayerAdded:Connect(load)
+Players.PlayerRemoving:Connect(function(player) save(player) sessions[player] = nil end)
+game:BindToClose(function() for _, player in ipairs(Players:GetPlayers()) do save(player) end task.wait(2) end)
 
 task.spawn(function()
-	while task.wait(60) do
+	while task.wait(C.GrowthTime) do
 		for player, session in pairs(sessions) do
-			if session.dirty and player.Parent then
-				savePlayer(player)
-				session.dirty = false
+			local stats = player:FindFirstChild("leaderstats")
+			if stats and player.Parent then
+				local amount = growth(player)
+				stats.Clicks.Value += amount
+				stats.TongueLength.Value = math.min(C.MaxTongue, stats.TongueLength.Value + amount)
+				session.dirty = true
+				feedback:FireClient(player, "Growth", amount)
 			end
 		end
 	end
 end)
 
-local function newPart(parent, name, size, position, color, material)
-	local part = Instance.new("Part")
-	part.Name = name
-	part.Size = size
-	part.Position = position
-	part.Anchored = true
-	part.Color = color
-	part.Material = material or Enum.Material.SmoothPlastic
-	part.TopSurface = Enum.SurfaceType.Smooth
-	part.BottomSurface = Enum.SurfaceType.Smooth
-	part.Parent = parent
-	return part
+task.spawn(function()
+	while task.wait(60) do
+		for player, session in pairs(sessions) do
+			if session.dirty and player.Parent then save(player) session.dirty = false end
+		end
+	end
+end)
+
+local function block(parent, name, size, position, color, material)
+	local object = Instance.new("Part")
+	object.Name, object.Size, object.Position = name, size, position
+	object.Anchored, object.Color, object.Material = true, color, material or Enum.Material.SmoothPlastic
+	object.TopSurface, object.BottomSurface, object.Parent = Enum.SurfaceType.Smooth, Enum.SurfaceType.Smooth, parent
+	return object
+end
+
+local COLORS = {
+	Color3.fromRGB(255, 94, 155), Color3.fromRGB(70, 188, 255),
+	Color3.fromRGB(255, 185, 45), Color3.fromRGB(161, 89, 255),
+	Color3.fromRGB(73, 225, 145),
+}
+local NAMES = {"Candy Mouth", "Frozen Teeth", "Spicy Throat", "Cosmic Belly", "Golden Escape"}
+
+local function sign(target, text, color)
+	local gui = Instance.new("BillboardGui")
+	gui.Size, gui.StudsOffset, gui.AlwaysOnTop, gui.Parent = UDim2.fromOffset(250, 70), Vector3.new(0, 5, 0), true, target
+	local label = Instance.new("TextLabel")
+	label.Size, label.BackgroundTransparency, label.Text = UDim2.fromScale(1, 1), 1, text
+	label.TextColor3, label.TextStrokeTransparency = color, 0
+	label.Font, label.TextScaled, label.Parent = Enum.Font.GothamBlack, true, gui
 end
 
 local function buildWorld()
-	local old = workspace:FindFirstChild("TongueEscapeWorld")
+	local old = workspace:FindFirstChild("CashTongueWorld")
 	if old then old:Destroy() end
 	local world = Instance.new("Folder")
-	world.Name = "TongueEscapeWorld"
-	world.Parent = workspace
-	local checkpoints = Instance.new("Folder")
-	checkpoints.Name = "Checkpoints"
-	checkpoints.Parent = world
-
-	local base = newPart(world, "StartIsland", Vector3.new(90, 4, 90), Vector3.new(0, 0, 0), Color3.fromRGB(61, 190, 92), Enum.Material.Grass)
+	world.Name, world.Parent = "CashTongueWorld", workspace
+	local points = Instance.new("Folder")
+	points.Name, points.Parent = "CheckpointSpawns", world
+	local start = block(world, "StartIsland", Vector3.new(90, 4, 90), Vector3.new(0, 0, 0), Color3.fromRGB(80, 205, 105), Enum.Material.Grass)
+	start:SetAttribute("TongueTarget", true)
 	local spawn = Instance.new("SpawnLocation")
-	spawn.Name = "StartSpawn"
-	spawn.Size = Vector3.new(12, 1, 12)
-	spawn.Position = Vector3.new(0, 3, 0)
-	spawn.Anchored = true
-	spawn.Neutral = true
-	spawn.Color = Color3.fromRGB(255, 220, 60)
-	spawn.Parent = world
+	spawn.Name, spawn.Size, spawn.Position = "StartSpawn", Vector3.new(14, 1, 14), Vector3.new(0, 3, 0)
+	spawn.Anchored, spawn.Neutral, spawn.Color, spawn.Parent = true, true, Color3.fromRGB(255, 225, 55), world
+	local marker = block(points, "Checkpoint0", Vector3.new(2, 1, 2), Vector3.new(0, 3, 0), Color3.new(1, 1, 1))
+	marker.Transparency, marker.CanCollide = 1, false
+	sign(spawn, "GROW YOUR TONGUE\nAIM AND SLIDE", Color3.fromRGB(255, 235, 80))
+	local slime = block(world, "Slime", Vector3.new(850, 4, 1200), Vector3.new(0, -24, 520), Color3.fromRGB(97, 255, 60), Enum.Material.Neon)
+	slime.Touched:Connect(function(hit) local human = hit.Parent and hit.Parent:FindFirstChildOfClass("Humanoid") if human then human.Health = 0 end end)
 
-	local deathFloor = newPart(world, "Slime", Vector3.new(500, 3, 500), Vector3.new(0, -22, 260), Color3.fromRGB(115, 255, 55), Enum.Material.Neon)
-	deathFloor.Touched:Connect(function(hit)
-		local humanoid = hit.Parent and hit.Parent:FindFirstChildOfClass("Humanoid")
-		if humanoid then humanoid.Health = 0 end
-	end)
-
-	local colors = {
-		Color3.fromRGB(255, 92, 148),
-		Color3.fromRGB(80, 190, 255),
-		Color3.fromRGB(255, 183, 55),
-		Color3.fromRGB(160, 95, 255)
-	}
-	local last = Vector3.new(0, 8, 28)
-	for index = 1, 36 do
-		local side = (index % 2 == 0) and 1 or -1
-		local x = side * (10 + (index % 4) * 5)
-		local y = 7 + index * 6
-		local z = 28 + index * 13
-		last = Vector3.new(x, y, z)
-		local width = (index % 5 == 0) and 9 or 15
-		local platform = newPart(world, "TonguePlatform" .. index, Vector3.new(width, 2, 9), last, colors[(index - 1) % #colors + 1], Enum.Material.SmoothPlastic)
-		if index % 6 == 0 then
-			local checkpointNumber = index / 6
-			platform.Name = "Checkpoint" .. checkpointNumber
-			platform.Color = Color3.fromRGB(255, 230, 40)
-			platform.Material = Enum.Material.Neon
-			platform.Parent = checkpoints
-			platform.Touched:Connect(function(hit)
-				local player = Players:GetPlayerFromCharacter(hit.Parent)
-				local progress = player and player:FindFirstChild("Progress")
-				if progress and checkpointNumber > progress.Checkpoint.Value then
-					progress.Checkpoint.Value = checkpointNumber
-					sessions[player].dirty = true
-					feedbackEvent:FireClient(player, "Checkpoint " .. checkpointNumber)
-				end
-			end)
-		end
-		if index % 4 == 0 then
-			local pole = newPart(world, "GrapplePole" .. index, Vector3.new(3, 14, 3), last + Vector3.new(-side * 12, 7, 4), Color3.fromRGB(255, 110, 180), Enum.Material.Neon)
-			pole.Shape = Enum.PartType.Cylinder
-			pole.Orientation = Vector3.new(0, 0, 90)
+	local current, number = Vector3.new(0, 7, 34), 0
+	for zone = 1, C.Zones do
+		local range = 32 + (zone - 1) * 18
+		for index = 1, C.Pads do
+			number += 1
+			local side = number % 2 == 0 and 1 or -1
+			local x, y = side * (8 + number % 3 * 4), 4 + zone
+			local z = math.sqrt(math.max(100, range * range - x * x - y * y))
+			if number == 1 then current = Vector3.new(-8, 7, 38) else current += Vector3.new(x, y, z) end
+			local pad = block(world, "Platform" .. number, Vector3.new(20, 2, 15), current, COLORS[zone])
+			pad:SetAttribute("TongueTarget", true)
+			pad:SetAttribute("Zone", zone)
+			if index == 1 then sign(pad, "ZONE " .. zone .. "\n" .. NAMES[zone], COLORS[zone]) end
+			if index == C.Pads then
+				pad.Name, pad.Material = "ZoneCheckpoint" .. zone, Enum.Material.Neon
+				local checkpoint = block(points, "Checkpoint" .. zone, Vector3.new(2, 1, 2), current + Vector3.new(0, 3, 0), Color3.new(1, 1, 1))
+				checkpoint.Transparency, checkpoint.CanCollide = 1, false
+				pad.Touched:Connect(function(hit)
+					local player = Players:GetPlayerFromCharacter(hit.Parent)
+					local progress = player and player:FindFirstChild("Progress")
+					if progress and zone > progress.Checkpoint.Value then
+						progress.Checkpoint.Value = zone
+						sessions[player].dirty = true
+						feedback:FireClient(player, "ZONE COMPLETE: " .. NAMES[zone])
+					end
+				end)
+			end
 		end
 	end
-
-	local finish = newPart(world, "Finish", Vector3.new(34, 3, 34), last + Vector3.new(0, 12, 18), Color3.fromRGB(255, 213, 40), Enum.Material.Neon)
-	local finishDebounce = {}
+	local finish = block(world, "GoldenFinish", Vector3.new(48, 4, 48), current + Vector3.new(0, 12, 38), Color3.fromRGB(255, 214, 48), Enum.Material.Neon)
+	finish:SetAttribute("TongueTarget", true)
+	sign(finish, "CASH ESCAPED!", Color3.fromRGB(255, 235, 80))
+	local debounce = {}
 	finish.Touched:Connect(function(hit)
 		local player = Players:GetPlayerFromCharacter(hit.Parent)
-		if not player or finishDebounce[player] then return end
-		finishDebounce[player] = true
-		local stats = player:FindFirstChild("leaderstats")
-		local progress = player:FindFirstChild("Progress")
-		if stats and progress and progress.Checkpoint.Value >= 6 then
-			stats.Wins.Value += 1
-			stats.Clicks.Value += CONFIG.FinishReward
-			progress.Checkpoint.Value = 0
-			sessions[player].dirty = true
-			feedbackEvent:FireClient(player, "ESCAPED! +1 Win and +" .. CONFIG.FinishReward .. " Clicks")
-			task.delay(1, function()
-				if player.Parent then player:LoadCharacter() end
-			end)
-		end
-		task.delay(3, function() finishDebounce[player] = nil end)
+		if not player or debounce[player] then return end
+		local stats, progress = player:FindFirstChild("leaderstats"), player:FindFirstChild("Progress")
+		if not stats or not progress or progress.Checkpoint.Value < C.Zones then return end
+		debounce[player] = true
+		stats.Wins.Value += 1
+		stats.Clicks.Value += C.FinishReward
+		progress.Checkpoint.Value = 0
+		sessions[player].dirty = true
+		feedback:FireClient(player, "ESCAPED! +1 WIN +1000 GROWTH")
+		task.delay(2, function() if player.Parent then player:LoadCharacter() end end)
+		task.delay(5, function() debounce[player] = nil end)
 	end)
-
-	base:SetAttribute("GameTitle", "Cash's Big Fat Tongue Escape")
 end
 
 buildWorld()
