@@ -478,7 +478,6 @@ local function buildWorld()
 		task.delay(3, function() finishDebounce[player] = nil end)
 	end)
 
-	workspace.FallenPartsDestroyHeight = -40
 	base:SetAttribute("GameTitle", "Cash's Big Fat Tongue Escape")
 end
 
