@@ -69,3 +69,32 @@ Open this folder in a terminal and run rojo serve after installing Rojo. Connect
 ## Balancing
 
 Main balance values are at the top of GameServer.server.lua. You can change starting tongue range, click cooldown, pull speed, maximum tongue size, finish rewards, rebirth cost, and upgrade cost there.
+
+
+## Premium shop setup
+
+Publish the experience before creating paid items.
+
+Create these permanent passes in Creator Dashboard:
+
+1. VIP Tongue at 299 Robux
+2. Double Growth at 149 Robux
+3. Super Tongue at 199 Robux
+
+Create these repeatable developer products:
+
+1. 500 Clicks at 25 Robux
+2. 5000 Clicks at 99 Robux
+3. Skip Checkpoint at 39 Robux
+
+Copy each numeric asset ID. In Studio, open ReplicatedStorage, then MonetizationConfig. Replace the matching zero with each ID. Publish the experience again.
+
+VIP Tongue gives a gold tongue, a visible VIP crown tag, faster walking, and 50 percent bonus growth.
+
+Double Growth permanently doubles click and tongue gains.
+
+Super Tongue adds 30 studs of grapple range, a stronger pull, and a purple tongue.
+
+Developer products are awarded by the server through ProcessReceipt. Do not grant developer products from a local script.
+
+Test each item with a low price before advertising the game. Roblox controls the purchase prompt and displays the live price automatically.
