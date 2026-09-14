@@ -6,7 +6,7 @@ local MarketplaceService = game:GetService("MarketplaceService")
 local Monetization = require(ReplicatedStorage:WaitForChild("MonetizationConfig"))
 
 local CONFIG = {
-	StartingTongue = 12,
+	StartingTongue = 45,
 	ClickCooldown = 0.12,
 	GrappleCooldown = 0.35,
 	PullSpeed = 82,
@@ -88,6 +88,45 @@ end
 local function applyCharacterBenefits(player, character)
 	local humanoid = character:WaitForChild("Humanoid", 5)
 	local head = character:WaitForChild("Head", 5)
+
+	if head and not character:FindFirstChild("FatTongue") then
+		local tongue = Instance.new("Part")
+		tongue.Name = "FatTongue"
+		tongue.Color = Color3.fromRGB(255, 84, 155)
+		tongue.Material = Enum.Material.SmoothPlastic
+		tongue.CanCollide = false
+		tongue.CanTouch = false
+		tongue.CanQuery = false
+		tongue.Massless = true
+		tongue.CastShadow = false
+		tongue.Parent = character
+
+		local weld = Instance.new("Weld")
+		weld.Name = "TongueWeld"
+		weld.Part0 = head
+		weld.Part1 = tongue
+		weld.Parent = tongue
+
+		local function resizeTongue()
+			local stats = player:FindFirstChild("leaderstats")
+			local value = stats and stats:FindFirstChild("TongueLength")
+			local visibleLength = value and math.clamp(1.8 + value.Value * 0.045, 2.5, 10) or 3
+			tongue.Size = Vector3.new(0.75, 0.34, visibleLength)
+			weld.C0 = CFrame.new(0, -0.22, -0.45 - visibleLength * 0.5)
+			if player:GetAttribute("HasVIP") then
+				tongue.Color = Color3.fromRGB(255, 210, 40)
+				tongue.Material = Enum.Material.Neon
+			elseif player:GetAttribute("HasSuperTongue") then
+				tongue.Color = Color3.fromRGB(170, 75, 255)
+				tongue.Material = Enum.Material.Neon
+			end
+		end
+
+		resizeTongue()
+		local stats = player:FindFirstChild("leaderstats")
+		local lengthValue = stats and stats:FindFirstChild("TongueLength")
+		if lengthValue then lengthValue.Changed:Connect(resizeTongue) end
+	end
 	if player:GetAttribute("HasVIP") and humanoid then humanoid.WalkSpeed = 20 end
 	if player:GetAttribute("HasVIP") and head and not head:FindFirstChild("VIPTag") then
 		local tag = Instance.new("BillboardGui")
@@ -211,7 +250,6 @@ local function grapple(player, target)
 		feedbackEvent:FireClient(player, "Too far away")
 		return
 	end
-	if head.CFrame.LookVector:Dot(offset.Unit) < 0.15 then return end
 
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
