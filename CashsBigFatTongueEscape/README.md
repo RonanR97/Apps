@@ -2,6 +2,21 @@
 
 A complete playable Roblox starter game built in Luau.
 
+## Version four overhaul
+
+Version four replaces the old grapple prototype with the proper tongue escape loop.
+
+1. Tongue length grows automatically every second.
+2. Aim at a coloured platform and extend the tongue.
+3. A solid tongue stretches from Cash to the platform.
+4. Cash slides along the tongue and lands on the target.
+5. The crosshair turns green when the target is reachable.
+6. Five themed zones increase the required tongue range.
+7. Each completed zone becomes a saved checkpoint.
+8. Finishing awards a win and 1000 growth points.
+9. Rebirths and upgrades increase passive growth.
+10. VIP, Double Growth, and Super Tongue remain supported.
+
 ## Included
 
 1. Secure server controlled clicking and tongue growth
